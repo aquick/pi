@@ -32,6 +32,11 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.BufferedReader;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.OutputStreamWriter;
+import java.util.zip.ZipInputStream;
 
 import org.gmplib.gmpjni.GMP;
 import org.gmplib.gmpjni.GMP.mpf_t;
@@ -45,6 +50,7 @@ public class MainActivity extends Activity implements UI {
     AsyncTask<Integer, Integer, Integer> task = null;
     private mpf_t refPi;
     private String refPiStr;
+    private long refPiDigits;
     private static final double BITS_PER_DIGIT  =  3.32192809488736234787;
 
     @Override
@@ -72,7 +78,7 @@ public class MainActivity extends Activity implements UI {
                             if (d == 0) {
                                 task.execute();
                             } else {
-                        	if (d >= MainActivity.this.refPiStr.length()) {
+                        	if (d >= MainActivity.this.refPiDigits) {
                     	            MainActivity.this.display(
                     	                MainActivity.this.getResources().getString(R.string.warning1));
                         	}
@@ -107,31 +113,61 @@ public class MainActivity extends Activity implements UI {
     private void initPi()
         throws Exception
     {
+	long count = 0;
 	String line;
-	int i;
-	int j;
-	StringBuffer sb = new StringBuffer();
-	BufferedReader br = new BufferedReader(new InputStreamReader(this.getResources().openRawResource(R.raw.pi)));
-	for (;;) {
-	    line = br.readLine();
-	    if (line == null) break;
-	    i = 0;
-	    while (line.charAt(i) == ' ' ||
-		   line.charAt(i) == '\t' ||
-		   line.charAt(i) == '\r' ||
-		   line.charAt(i) == '\n') i++;
-	    j = line.length() - 1;
-	    while (line.charAt(j) == ' ' ||
-		   line.charAt(j) == '\t' ||
-		   line.charAt(j) == '\r' ||
-		   line.charAt(j) == '\n') j--;
-	    sb.append(line.substring(i, j + 1));
-	}
+
 	refPi = new mpf_t();
-	refPiStr = sb.toString();
-	GMP.mpf_set_prec(refPi, (long)((double)refPiStr.length()*BITS_PER_DIGIT+16));
-	Log.d("PI_Task", "initPi: ref=" + refPiStr);
-	GMP.mpf_set_str(refPi, refPiStr, 10);
+
+	File f = this.getFileStreamPath("50.txt");
+	if (!f.exists()) {
+	    Log.d("PI_Task", "initPi: creating 50.txt from g50.zip");
+	    byte[] buffer = new byte[4096];
+	    ZipInputStream is = new ZipInputStream(this.getResources().openRawResource(R.raw.g50));
+	    FileOutputStream fo = this.openFileOutput("50.txt", MODE_PRIVATE);
+	    int n;
+            if (is.getNextEntry() == null) {
+        	throw new Exception("initPi: no entries in g50.zip");
+            }
+	    while (true) {
+		n = is.read(buffer);
+		if (n <= 0) break;
+		fo.write(buffer, 0, n);
+	    }
+	    fo.close();
+	    is.close();
+	    Log.d("PI_Task", "initPi: created 50.txt");
+	}
+	f = this.getFileStreamPath("50_pi.txt");
+	if (!f.exists()) {	    
+	    Log.d("PI_Task", "initPi: creating 50_pi.txt from 50.txt");
+	    count = 0;
+            BufferedReader br = new BufferedReader(new InputStreamReader(this.openFileInput("50.txt")));
+	    OutputStreamWriter os = new OutputStreamWriter(this.openFileOutput("50_pi.txt", MODE_PRIVATE));
+	    boolean reading = false;
+	    for (;;) {
+		line = br.readLine();
+		if (line == null) break;
+		if (line.startsWith("3.")) {
+		    reading = true;
+		} else if (reading && line.startsWith("End of Project Gutenberg's Pi")) {
+		    reading = false;
+		}
+		if (reading) {
+		    if (!line.isEmpty()) {
+			line = line.replace(" ", "");
+			os.write(line);
+			count += line.length();
+		    }
+		}
+	    }
+	    Log.d("PI_Task", "initPi: created 50_pi.txt of length " + count);
+	    os.close();
+	    br.close();
+	}
+	GMP.mpf_set_prec(refPi, (long)((double)f.length()*BITS_PER_DIGIT+16));
+	count = GMP.mpf_inp_str(refPi, f.getPath(), 10);
+	refPiDigits = count;
+	Log.d("PI_Task", "initPi: created reference pi value (" + count + " digits)");
     }
     
     @Override

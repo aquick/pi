@@ -647,6 +647,9 @@ public class PI_Task extends AsyncTask<Integer, Integer, Integer>
                 out = params[1].intValue();
             }
 
+            if (d < (int)DIGITS_PER_ITER) {
+        	d = 2*(int)DIGITS_PER_ITER + 1;
+            }
 	    terms = (int)((double)d/DIGITS_PER_ITER);
 	    while ((1L<<depth)<terms) {
 	        depth++;
